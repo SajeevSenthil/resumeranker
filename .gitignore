@@ -1,0 +1,10 @@
+data/*.npy
+data/*.pkl
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.env
