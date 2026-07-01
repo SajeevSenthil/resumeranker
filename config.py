@@ -6,13 +6,13 @@ DATA_DIR = ROOT / "data"
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 EMBEDDING_BATCH_SIZE = 256
 
-# Weights must sum to 1.0
+# Role is a multiplicative gate; these quality weights sum to 1.0.
+# final_score = role_score * (company*w + skills*w + behavior*w + semantic*w)
 SCORE_WEIGHTS = {
-    "role": 0.25,
-    "company": 0.25,
-    "skills": 0.20,
-    "behavior": 0.20,
-    "semantic": 0.10,
+    "company": 0.30,
+    "skills": 0.25,
+    "behavior": 0.25,
+    "semantic": 0.20,
 }
 
 TOP_N = 100

@@ -14,18 +14,18 @@ def combine_scores(
     semantic_scores: np.ndarray,
 ) -> np.ndarray:
     """
-    Weighted sum of the five scoring components.
-    All inputs are in [0, 1]; output is in [0, 1].
-    Weights are read from config so they can be tuned in one place.
+    Role score acts as a multiplicative gate over a quality score.
+    A Civil Engineer (role=0.02) can never exceed 0.02 regardless of how
+    good their company/behavior/semantic looks — additive rescuing is gone.
     """
     w = SCORE_WEIGHTS
-    return (
-        feature_matrix[:, _COL_ROLE] * w["role"]
-        + feature_matrix[:, _COL_COMPANY] * w["company"]
+    quality = (
+        feature_matrix[:, _COL_COMPANY] * w["company"]
         + feature_matrix[:, _COL_SKILLS] * w["skills"]
         + feature_matrix[:, _COL_BEHAVIOR] * w["behavior"]
         + semantic_scores * w["semantic"]
     )
+    return feature_matrix[:, _COL_ROLE] * quality
 
 
 def component_scores(feature_row: np.ndarray) -> dict[str, float]:

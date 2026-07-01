@@ -40,10 +40,12 @@ def _who_sentence(meta: dict, scores: dict) -> str:
     # Company context
     if company_score >= 0.72:
         company_phrase = "at product-focused companies"
-    elif company_score <= 0.20:
-        company_phrase = "primarily in IT-services roles"
+    elif company_score >= 0.45:
+        company_phrase = "across product and services companies"
+    elif company_score >= 0.25:
+        company_phrase = "primarily in non-tech or services roles"
     else:
-        company_phrase = "across mixed product and services companies"
+        company_phrase = "entirely in IT-services roles"
 
     # Skill alignment
     if skill_score >= 0.55:

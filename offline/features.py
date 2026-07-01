@@ -31,11 +31,42 @@ N_FEATURES = len(FEATURE_NAMES)
 
 _TODAY = date.today()
 
+# ML/IR keywords expected in actual role descriptions (not skills list).
+# Presence here means the candidate used these things at work — harder to fake.
+_ML_CAREER_KEYWORDS: frozenset[str] = frozenset({
+    "retrieval", "ranking", "recommendation", "embedding", "embeddings",
+    "vector", "semantic search", "similarity", "dense retrieval",
+    "machine learning", "deep learning", "neural", "transformer",
+    "fine-tuning", "fine-tune", "llm", "language model",
+    "nlp", "natural language", "text classification",
+    "faiss", "qdrant", "milvus", "pinecone", "weaviate", "elasticsearch",
+    "opensearch", "chromadb", "pgvector",
+    "ndcg", "mrr", "a/b test", "evaluation framework", "offline evaluation",
+    "feature store", "model serving", "inference", "model deployment",
+    "pytorch", "tensorflow", "hugging face", "scikit-learn", "xgboost",
+    "rag", "retrieval augmented", "reranking", "re-ranking", "two-tower",
+    "candidate generation", "bert", "gpt", "lora", "qlora",
+    "learning to rank", "learning-to-rank",
+})
+
+
+def _career_ml_signal(candidate: dict) -> float:
+    """
+    Fraction of ML/IR keywords found across all role description text.
+    Scores evidence of actual ML work, independent of the skills list.
+    Capped at 15 unique hits for a full score.
+    """
+    descriptions = " ".join(
+        r.get("description", "").lower() for r in candidate["career_history"]
+    )
+    hits = sum(1 for kw in _ML_CAREER_KEYWORDS if kw in descriptions)
+    return min(hits / 15.0, 1.0)
+
 
 # ---------------------------------------------------------------------------
 # Role score
-# Measures how aligned the candidate's career trajectory is with an ML/AI
-# engineering role. Uses both current title and full career history.
+# Blends title-pattern matching with career-description ML evidence.
+# Title alone is gameable (people add "AI" to any title); descriptions less so.
 # ---------------------------------------------------------------------------
 
 def _match_title(title: str) -> float:
@@ -54,10 +85,13 @@ def _role_score(candidate: dict) -> float:
     career_weighted = sum(_match_title(r["title"]) * r["duration_months"] for r in career)
     career_avg = career_weighted / total_months
 
-    # Current title carries extra weight: it's what they're doing now
     current_score = _match_title(profile["current_title"])
+    title_score = career_avg * 0.45 + current_score * 0.55
 
-    return career_avg * 0.45 + current_score * 0.55
+    # Career description evidence: harder to fake than title or skills list
+    desc_signal = _career_ml_signal(candidate)
+
+    return title_score * 0.65 + desc_signal * 0.35
 
 
 # ---------------------------------------------------------------------------
@@ -212,16 +246,27 @@ def extract_metadata(candidate: dict) -> dict:
     skills = candidate.get("skills", [])
     education = candidate.get("education", [])
 
-    top_skills = sorted(
-        skills,
-        key=lambda s: (
-            {"expert": 3, "advanced": 2, "intermediate": 1, "beginner": 0}.get(
-                s["proficiency"], 0
-            ),
-            s.get("endorsements", 0),
-        ),
+    # JD-relevant skills: those that matched the ontology, ranked by depth.
+    # Used in reasoning so the explanation cites actual matching skills,
+    # not globally popular ones like TTS or Speech Recognition.
+    jd_skills = sorted(
+        [s for s in skills if _resolve_group(s["name"]) is not None],
+        key=_skill_depth,
         reverse=True,
-    )[:5]
+    )[:4]
+
+    # Fallback: if no JD-relevant skills found, use globally top skills
+    if not jd_skills:
+        jd_skills = sorted(
+            skills,
+            key=lambda s: (
+                {"expert": 3, "advanced": 2, "intermediate": 1, "beginner": 0}.get(
+                    s["proficiency"], 0
+                ),
+                s.get("endorsements", 0),
+            ),
+            reverse=True,
+        )[:3]
 
     best_edu_score = max(
         (EDUCATION_TIER_SCORES.get(e.get("tier", "unknown"), 0.35) for e in education),
@@ -235,7 +280,7 @@ def extract_metadata(candidate: dict) -> dict:
         "industry": profile["current_industry"],
         "company_size": profile["current_company_size"],
         "yoe": profile["years_of_experience"],
-        "top_skills": [s["name"] for s in top_skills],
+        "top_skills": [s["name"] for s in jd_skills],
         "open_to_work": signals["open_to_work_flag"],
         "notice_period": signals["notice_period_days"],
         "response_rate": signals["recruiter_response_rate"],
