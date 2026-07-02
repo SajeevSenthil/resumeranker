@@ -99,7 +99,7 @@ def rank(jd_text: str, output_path: Path) -> None:
     ).reset_index(drop=True)
     df["rank"] = range(1, len(df) + 1)
 
-    df.to_csv(output_path, index=False)
+    df.to_csv(output_path, index=False, encoding="utf-8")
 
     elapsed = time.perf_counter() - t0
     print(f"Done. Written {len(df)} rows to {output_path}  ({elapsed:.1f}s total)")

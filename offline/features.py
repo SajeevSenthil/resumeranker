@@ -227,11 +227,59 @@ def _behavior_score(signals: dict) -> float:
 # Top-level extractors
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Honeypot detection
+# Spec §7: ~80 synthetic profiles with impossible signal combinations.
+# >10 honeypots in top-100 = disqualification.
+# Patterns: (1) expert/advanced skills with 0 duration_months,
+#           (2) role duration_months far exceeding the actual date span.
+# We multiply role_score by the penalty; since role_score is already the
+# multiplicative gate, even a 0.05 penalty collapses the final score to ~0.002.
+# ---------------------------------------------------------------------------
+
+def _honeypot_multiplier(candidate: dict) -> float:
+    skills = candidate.get("skills", [])
+    career = candidate.get("career_history", [])
+
+    # Pattern 1: claimed expert/advanced proficiency with zero usage time
+    ghost_skills = sum(
+        1 for s in skills
+        if s.get("proficiency") in {"expert", "advanced"}
+        and s.get("duration_months", 1) == 0
+    )
+    if ghost_skills >= 5:
+        return 0.05
+    if ghost_skills >= 3:
+        return 0.40
+
+    # Pattern 2: a role's stated duration_months exceeds what start→end dates allow
+    impossible_roles = 0
+    for role in career:
+        claimed = role.get("duration_months", 0)
+        try:
+            start = date.fromisoformat(role["start_date"])
+            end_str = role.get("end_date")
+            end = date.fromisoformat(end_str) if end_str else _TODAY
+            actual = (end.year - start.year) * 12 + (end.month - start.month)
+            if claimed > actual + 6:   # 6-month tolerance for rounding
+                impossible_roles += 1
+        except (ValueError, TypeError, KeyError):
+            pass
+
+    if impossible_roles >= 2:
+        return 0.05
+    if impossible_roles >= 1:
+        return 0.40
+
+    return 1.0
+
+
 def extract_features(candidate: dict) -> np.ndarray:
     signals = candidate["redrob_signals"]
+    hp = _honeypot_multiplier(candidate)
     return np.array(
         [
-            _role_score(candidate),
+            _role_score(candidate) * hp,
             _company_score(candidate),
             _skill_score(candidate),
             _behavior_score(signals),
