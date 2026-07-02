@@ -28,26 +28,26 @@ Two-phase design: expensive work is done offline once; the online ranking step i
 
 ```mermaid
 flowchart LR
-    subgraph offline ["⚙️  OFFLINE  ·  run once on all candidates"]
+    subgraph offline ["OFFLINE — run once on all candidates"]
         direction TB
-        A[candidates.jsonl\n100 K profiles] --> B[offline/parse.py]
-        B --> C[features.py\nextract_features per candidate]
-        B --> D[embed.py\nbuild_candidate_text]
-        D --> E[all-MiniLM-L6-v2\nSentenceTransformer]
-        C --> F[(feature_matrix.npy\nfloat32  N × 4)]
-        E --> G[(embeddings.npy\nfloat32  N × 384\nL2-normalised)]
-        B --> H[(candidate_ids.pkl\nmetadata.pkl)]
+        A["candidates.jsonl"] --> B["parse.py"]
+        B --> C["features.py — extract_features"]
+        B --> D["embed.py — build_candidate_text"]
+        D --> E["all-MiniLM-L6-v2"]
+        C --> F[("feature_matrix.npy — float32 N x 4")]
+        E --> G[("embeddings.npy — float32 N x 384, L2-normalised")]
+        B --> H[("candidate_ids.pkl + metadata.pkl")]
     end
 
-    subgraph online ["⚡  ONLINE  ·  per JD  ·  < 30 s"]
+    subgraph online ["ONLINE — per JD, under 30 s"]
         direction TB
-        I[jd.txt] --> J[encode JD\nall-MiniLM-L6-v2]
-        J --> K[jd_vec  1 × 384]
-        L[Load artifacts\nfrom data/] --> M[matmul + combine_scores\nnumpy only]
+        I["jd.txt"] --> J["Encode JD"]
+        J --> K["jd_vec — 1 x 384"]
+        L["Load artifacts from data/"] --> M["matmul + combine_scores"]
         K --> M
-        M --> N[argpartition\nO(n) top-100 select]
-        N --> O[reasoning.py\ntemplate generation]
-        O --> P[submission.csv\ncandidate_id,rank,score,reasoning]
+        M --> N["argpartition — top-100 select"]
+        N --> O["reasoning.py — template generation"]
+        O --> P["submission.csv"]
     end
 
     F --> L
@@ -59,7 +59,7 @@ flowchart LR
 
 ## Scoring Formula
 
-Role score acts as a **multiplicative gate** over a quality sub-score. A candidate with an irrelevant title (e.g. Civil Engineer, $r_\text{role} \approx 0.02$) cannot be rescued by high semantic similarity or strong skills — there is no additive path to the top 100.
+Role score acts as a **multiplicative gate** over a quality sub-score. A candidate with an irrelevant title (e.g. Civil Engineer, `role_score ≈ 0.02`) cannot be rescued by high semantic similarity or strong skills — there is no additive path to the top 100.
 
 $$
 \text{final\_score} = r_\text{role} \times \bigl(0.30\cdot s_\text{company} + 0.25\cdot s_\text{skills} + 0.25\cdot s_\text{behavior} + 0.20\cdot s_\text{semantic}\bigr)
@@ -121,7 +121,7 @@ The dataset contains ~80 synthetic honeypot profiles (Spec §7). More than 10 ho
 | ≥ 1 | 0.40 |
 | 0 | 1.00 |
 
-The multiplier is applied to `role_score` before entering the main formula. Because role is the multiplicative gate, a honeypot with multiplier 0.05 can reach at most $0.05 \times 1.0 = 0.05$ final score regardless of all other signals.
+The multiplier is applied to `role_score` before entering the main formula. Because role is the multiplicative gate, a honeypot with multiplier 0.05 can reach at most `0.05 × 1.0 = 0.05` final score regardless of all other signals.
 
 ---
 
