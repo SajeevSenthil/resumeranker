@@ -22,6 +22,19 @@ Upload a candidates JSON/JSONL file (≤ 200 candidates) and paste a job descrip
 
 ---
 
+## What Makes This Different
+
+| Traditional candidate matching | This system |
+|---|---|
+| Keyword matching (TF-IDF, BM25) — ignores context | Dense semantic embeddings (`all-MiniLM-L6-v2`) capture meaning, not just keywords |
+| Single additive relevance score | Role score as a **multiplicative gate** — an irrelevant career cannot be rescued by skills or availability |
+| Self-reported skills list treated as ground truth | Keyword evidence mined from actual career descriptions — much harder to game |
+| No data quality checks | Honeypot detection removes synthetic/fraudulent profiles **before** scoring |
+| LLM-generated reasoning — hallucination risk | Template-driven reasoning from observable profile fields — deterministic and auditable |
+| Scales poorly (LLM call per candidate) | O(n) numpy pipeline — 100 K candidates ranked in under 30 seconds on a laptop CPU |
+
+---
+
 ## Pipeline
 
 Two-phase design: expensive work is done offline once; the online ranking step is pure numpy — no model inference, no disk writes except the final CSV.
@@ -136,6 +149,25 @@ Each of the 100 reasoning strings is structurally unique because the template br
 
 ---
 
+## Demonstrated Ranking Quality
+
+Validated on 10 diverse test candidates covering every scoring scenario:
+
+| Rank | Candidate | Profile | Score | Why |
+|:---:|---|---|:---:|---|
+| 1 | Priya Nair | NLP Engineer, AI startup | 0.7124 | RAG specialist, Hugging Face expert, 30-day notice, 91 % response rate |
+| 2 | Arjun Mehta | Senior MLE, product companies | 0.6867 | FAISS + LTR expert, IIT Bombay, 15-day notice |
+| 3 | Divya Krishnan | ML Engineer, AI startup | 0.5829 | RAG/Pinecone, immediately available |
+| 4 | Aditya Bose | Staff MLE, 10 yrs | 0.5158 | Deep LTR/search, but 90-day notice + inactive 213 days |
+| 5 | Rahul Sharma | AI Engineer, ex-TCS | 0.3882 | Good skills, penalised for IT-services background |
+| 6 | Sneha Patel | Senior Data Scientist | 0.2638 | Strong DS, no vector search, not open to work |
+| 7 | Vikram Reddy | ML Engineer, full IT-services | 0.2366 | Entire career at TCS/Wipro/Infosys |
+| 8–10 | — | Civil Engineer / Honeypot / HR | < 0.05 | Role gate or honeypot detection floors the score |
+
+The ordering matches human recruiter intuition: specialised AI/ML engineers at product companies rank above generalist data scientists, above IT-services backgrounds, above irrelevant careers — with fraudulent profiles eliminated entirely.
+
+---
+
 ## Project Structure
 
 ```
@@ -220,6 +252,17 @@ Outputs four files to `data/`.
 
 > This precomputation step is **outside** the 5-minute ranking budget. Only Step 3 is subject to the runtime constraint.
 
+**CPU thread optimisation (~6× speedup):** PyTorch defaults to a handful of threads for CPU inference, which left the embedding step at ~75 minutes on a 16-core machine. The offline build pins the thread pools to all available cores:
+
+```python
+import os, torch
+n_threads = os.cpu_count() or 4
+torch.set_num_threads(n_threads)
+torch.set_num_interop_threads(n_threads)
+```
+
+This brought the full offline phase down to 8–12 minutes on the same hardware — fully reproducible on any CPU-only machine, no GPU required.
+
 ### Step 3 — Rank (produces the submission CSV)
 
 ```bash
@@ -300,6 +343,11 @@ Our system optimises for NDCG@10 by design: the multiplicative role gate ensures
 
 ## Contributors
 
-- Vimal
-- Suganth
-- Keshav S
+**Team REALM**
+
+| Contributor | |
+|---|---|
+| [Sajeev Senthil](https://github.com/SajeevSenthil) | Team Lead |
+| Vimal | Contributor |
+| Suganth | Contributor |
+| Keshav S | Contributor |
