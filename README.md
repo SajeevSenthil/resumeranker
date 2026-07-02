@@ -1,74 +1,171 @@
-# Redrob Candidate Ranker
+# Redrob Candidate Ranker — Team REALM
 
-Submission for the **Redrob Intelligent Candidate Discovery & Ranking Challenge**.
-Ranks the top 100 candidates from a 100K-resume pool against a job description.
+> Submission for the **Redrob Intelligent Candidate Discovery & Ranking Challenge**
+> Ranks the top 100 candidates from a 100 K-resume pool for a given job description.
 
-- CPU-only, no internet or API calls during ranking
-- Runs in under 30 seconds on a 16 GB machine
-- No LLM inference — deterministic reasoning from profile fields
-
----
-
-## How it works
-
-Two-phase pipeline:
-
-**Offline (run once)** — Reads every candidate from `candidates.jsonl`, extracts four structured
-feature scores and a sentence-transformer embedding, saves everything to `data/`.
-Takes a few minutes on CPU for 100K candidates.
-
-**Online (per JD, <30s)** — Loads precomputed artifacts, encodes the JD, scores all candidates
-with a single numpy matmul and weighted combine, selects the top 100, and writes the CSV.
-
-### Scoring
-
-Role score acts as a **multiplicative gate**. A candidate irrelevant to the JD (e.g. Civil Engineer,
-role\_score ≈ 0.02) cannot be rescued by strong company or skill signals.
-
-```
-final_score = role_score × (company×0.30 + skills×0.25 + behavior×0.25 + semantic×0.20)
-```
-
-| Component | Role in formula | What it measures |
-|---|---|---|
-| Role trajectory | Multiplicative gate | Title pattern + career description ML keyword density |
-| Company type | 0.30 | Product-company vs IT-services background, tenure-weighted |
-| Skill depth | 0.25 | Proficiency × duration × endorsements on 9 JD-relevant skill groups |
-| Behavioral readiness | 0.25 | Open-to-work flag, notice period, platform activity, responsiveness |
-| Semantic similarity | 0.20 | Cosine similarity of candidate embedding vs JD embedding |
-
-**Honeypot detection** is applied before scoring. Candidates with ≥5 expert/advanced skills
-at `duration_months=0`, or with role tenures that exceed the actual date span, receive a
-`0.05` multiplier on role\_score — effectively removing them from contention.
-
-Reasoning for each candidate is template-generated from observable profile fields — no LLM, no hallucination.
+![CPU-only](https://img.shields.io/badge/compute-CPU--only-blue)
+![No LLM](https://img.shields.io/badge/inference-No%20LLM-green)
+![Runtime](https://img.shields.io/badge/ranking%20runtime-%3C30s-brightgreen)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
 ---
 
-## Project structure
+## Live Demo
+
+HuggingFace Space: **[SajeevSenthil/redrob_ranker](https://huggingface.co/spaces/SajeevSenthil/redrob_ranker)**
+
+Upload a candidates JSON/JSONL file (≤ 200 candidates) and paste a job description — results appear in seconds, directly in the browser, no setup required.
+
+| Processing | Results |
+|---|---|
+| ![Processing](assets/1.png) | ![Results](assets/2.png) |
+
+---
+
+## Pipeline
+
+Two-phase design: expensive work is done offline once; the online ranking step is pure numpy — no model inference, no disk writes except the final CSV.
+
+```mermaid
+flowchart LR
+    subgraph offline ["⚙️  OFFLINE  ·  run once on all candidates"]
+        direction TB
+        A[candidates.jsonl\n100 K profiles] --> B[offline/parse.py]
+        B --> C[features.py\nextract_features per candidate]
+        B --> D[embed.py\nbuild_candidate_text]
+        D --> E[all-MiniLM-L6-v2\nSentenceTransformer]
+        C --> F[(feature_matrix.npy\nfloat32  N × 4)]
+        E --> G[(embeddings.npy\nfloat32  N × 384\nL2-normalised)]
+        B --> H[(candidate_ids.pkl\nmetadata.pkl)]
+    end
+
+    subgraph online ["⚡  ONLINE  ·  per JD  ·  < 30 s"]
+        direction TB
+        I[jd.txt] --> J[encode JD\nall-MiniLM-L6-v2]
+        J --> K[jd_vec  1 × 384]
+        L[Load artifacts\nfrom data/] --> M[matmul + combine_scores\nnumpy only]
+        K --> M
+        M --> N[argpartition\nO(n) top-100 select]
+        N --> O[reasoning.py\ntemplate generation]
+        O --> P[submission.csv\ncandidate_id,rank,score,reasoning]
+    end
+
+    F --> L
+    G --> L
+    H --> L
+```
+
+---
+
+## Scoring Formula
+
+Role score acts as a **multiplicative gate** over a quality sub-score. A candidate with an irrelevant title (e.g. Civil Engineer, $r_\text{role} \approx 0.02$) cannot be rescued by high semantic similarity or strong skills — there is no additive path to the top 100.
+
+$$
+\text{final\_score} = r_\text{role} \times \bigl(0.30\cdot s_\text{company} + 0.25\cdot s_\text{skills} + 0.25\cdot s_\text{behavior} + 0.20\cdot s_\text{semantic}\bigr)
+$$
+
+### Components
+
+| Component | Symbol | Weight | What it captures |
+|---|---|:---:|---|
+| **Role trajectory** | $r_\text{role}$ | gate | 65 % title-pattern match (career-tenure-weighted) + 35 % ML keyword density in actual job descriptions. Harder to game than title alone. |
+| **Company type** | $s_\text{company}$ | 0.30 | Tenure-weighted average of industry score (AI/SaaS = 1.0; IT-services = 0.08) × company-size proxy |
+| **Skill depth** | $s_\text{skills}$ | 0.25 | Depth-weighted match across 9 JD-specific skill groups (see below) |
+| **Behavioral readiness** | $s_\text{behavior}$ | 0.25 | Open-to-work flag, notice period, days since last activity, recruiter response rate, interview completion |
+| **Semantic similarity** | $s_\text{semantic}$ | 0.20 | Cosine similarity of L2-normalised candidate embedding vs. JD embedding |
+
+### Skill Depth
+
+For each skill $s$ matched to an ontology group:
+
+$$
+\text{depth}(s) = 0.55\cdot p(s) + 0.28\cdot\frac{\ln(\text{months}(s)+1)}{\ln(49)} + 0.17\cdot\frac{\ln(\text{endorsements}(s)+2)}{\ln(52)}
+$$
+
+where $p(s) \in \{0.20,\,0.50,\,0.85,\,1.00\}$ maps beginner / intermediate / advanced / expert proficiency. Log scaling prevents 48 months from dominating 12 months by 4×.
+
+The pipeline resolves skills against **9 groups** ordered by JD priority:
+
+| Priority | Group | Example skills |
+|:---:|---|---|
+| 1.00 | `vector_search` | FAISS, Qdrant, Milvus, Pinecone, Weaviate, Elasticsearch |
+| 1.00 | `dense_retrieval` | sentence-transformers, BGE, E5, bi-encoder, DPR |
+| 0.95 | `ranking` | learning-to-rank, LambdaMART, reranking, cross-encoder |
+| 0.90 | `evaluation` | NDCG, MRR, MAP, A/B testing, offline evaluation |
+| 0.88 | `hybrid_search` | BM25, TF-IDF, RAG, SPLADE, hybrid retrieval |
+| 0.80 | `recommendation` | collaborative filtering, two-tower, candidate generation |
+| 0.75 | `python_ml` | PyTorch, Hugging Face, scikit-learn, XGBoost |
+| 0.65 | `llm_fine_tuning` | LoRA, QLoRA, PEFT, instruction tuning |
+| 0.60 | `ml_infrastructure` | MLflow, W&B, model serving, feature store |
+
+---
+
+## Honeypot Detection
+
+The dataset contains ~80 synthetic honeypot profiles (Spec §7). More than 10 honeypots in the top-100 triggers disqualification at Stage 3. Two detection patterns are applied in `offline/features.py` before any scoring:
+
+**Pattern 1 — ghost skills:** Expert/advanced proficiency with `duration_months = 0`
+
+| Ghost skill count | Multiplier on $r_\text{role}$ |
+|:---:|:---:|
+| ≥ 5 | 0.05 |
+| ≥ 3 | 0.40 |
+| < 3 | 1.00 |
+
+**Pattern 2 — impossible tenure:** `claimed duration_months > actual date span + 6 months`
+
+| Impossible roles | Multiplier |
+|:---:|:---:|
+| ≥ 2 | 0.05 |
+| ≥ 1 | 0.40 |
+| 0 | 1.00 |
+
+The multiplier is applied to `role_score` before entering the main formula. Because role is the multiplicative gate, a honeypot with multiplier 0.05 can reach at most $0.05 \times 1.0 = 0.05$ final score regardless of all other signals.
+
+---
+
+## Reasoning Generation
+
+Reasoning strings are **fully deterministic and template-driven** — no LLM, no API calls, no hallucination possible. Every claim is derived from observable profile fields and computed scores:
+
+- **Who sentence:** title, years of experience, product vs. services company context, top matched skills, skill alignment level
+- **Availability sentence:** open-to-work flag, notice period, days since last platform activity, recruiter response rate
+
+Each of the 100 reasoning strings is structurally unique because the template branches on thresholds (e.g. `role_score ≥ 0.85` → "production ML/AI experience"; `company_score ≥ 0.72` → "product-focused companies"). This satisfies Spec §3 reasoning checks: specific facts, JD connection, honest concerns, no hallucination, variation, rank consistency.
+
+---
+
+## Project Structure
 
 ```
 resumeranker/
-├── config.py                   score weights, artifact paths, embedding model
-├── build_offline.py            CLI: precompute artifacts from candidates.jsonl
-├── rank.py                     CLI: online ranking against a JD
+├── config.py                   score weights, artifact paths, embedding model name
+├── build_offline.py            CLI entry point: precompute artifacts
+├── rank.py                     CLI entry point: online ranking against a JD
+├── app.py                      HuggingFace Space (Gradio 5 UI)
 ├── requirements.txt
-├── submission_metadata.yaml    required for submission portal
-├── data/                       generated artifacts (gitignored; .gitkeep tracks the folder)
+├── submission_metadata.yaml    required by submission portal
+├── test.json                   10 diverse test candidates for Space demo
+├── test_jd.txt                 JD text used in the demo
+├── assets/
+│   ├── 1.png                   screenshot — Space processing
+│   └── 2.png                   screenshot — ranked results
+├── data/                       generated artifacts (gitignored; .gitkeep tracks folder)
 │   ├── embeddings.npy          float32 (N, 384) — L2-normalised candidate embeddings
 │   ├── feature_matrix.npy      float32 (N, 4)  — [role, company, skills, behavior]
-│   ├── candidate_ids.pkl       ordered list of candidate IDs
-│   └── metadata.pkl            profile snapshots used for reasoning
+│   ├── candidate_ids.pkl       ordered list of candidate IDs (index → id)
+│   └── metadata.pkl            profile snapshots for reasoning generation
 ├── offline/
 │   ├── parse.py                JSONL and JSON array reader
 │   ├── embed.py                candidate text builder + SentenceTransformer encoder
 │   ├── features.py             structured scorers + honeypot detection
-│   └── build_artifacts.py      orchestrates the offline phase
+│   └── build_artifacts.py      orchestrates the offline precomputation phase
 └── ranker/
     ├── ontology.py             title patterns, skill groups, industry classifications
-    ├── score.py                multiplicative score combination
-    ├── reasoning.py            template-based reasoning strings
-    └── pipeline.py             online ranking pipeline
+    ├── score.py                combine_scores (multiplicative gate formula)
+    ├── reasoning.py            template-based reasoning string generation
+    └── pipeline.py             online ranking: load → score → select → write CSV
 ```
 
 ---
@@ -81,9 +178,16 @@ Requires Python 3.10+.
 pip install -r requirements.txt
 ```
 
+| Package | Version | Purpose |
+|---|---|---|
+| `sentence-transformers` | ≥ 2.7.0 | `all-MiniLM-L6-v2` embedding model |
+| `numpy` | ≥ 1.26.0 | matmul, argpartition, feature matrix |
+| `pandas` | ≥ 2.2.0 | CSV output |
+| `tqdm` | ≥ 4.66.0 | progress bars during offline phase |
+
 ---
 
-## Reproducing the submission
+## Reproducing the Submission
 
 ### Step 1 — Extract the job description
 
@@ -98,15 +202,23 @@ open('jd.txt', 'w', encoding='utf-8').write(text)
 "
 ```
 
-### Step 2 — Build artifacts (offline precomputation)
+### Step 2 — Build artifacts (offline precomputation, run once)
 
 ```bash
 python build_offline.py path/to/candidates.jsonl
 ```
 
 Accepts both `.jsonl` (one JSON object per line) and `.json` (array) formats.
-Runtime: approximately 8–12 minutes on a 16 GB CPU machine for 100K candidates.
 Outputs four files to `data/`.
+
+**Expected runtimes (100 K candidates, CPU-only):**
+
+| Machine | Approx. time |
+|---|---|
+| 16-core, 16 GB RAM (this submission) | 8 – 12 min |
+| 4-core, 8 GB RAM | 25 – 35 min |
+
+> This precomputation step is **outside** the 5-minute ranking budget. Only Step 3 is subject to the runtime constraint.
 
 ### Step 3 — Rank (produces the submission CSV)
 
@@ -114,8 +226,13 @@ Outputs four files to `data/`.
 python rank.py jd.txt team_YOUR_ID.csv
 ```
 
-Runtime: under 30 seconds. Output matches the submission spec exactly:
-`candidate_id, rank, score, reasoning` — 100 data rows, UTF-8, scores non-increasing.
+Runtime: **under 30 seconds** on any machine that completed Step 2.
+
+The output file matches Spec §2 exactly:
+- Columns in order: `candidate_id,rank,score,reasoning`
+- Exactly 100 data rows, ranks 1–100 each used once
+- Scores monotonically non-increasing; ties broken by `candidate_id` ascending
+- UTF-8 encoding
 
 ### Step 4 — Validate before uploading
 
@@ -125,25 +242,56 @@ python path/to/validate_submission.py team_YOUR_ID.csv
 
 ---
 
-## Compute environment
+## Submission Spec Compliance
 
-| Property | Value |
-|---|---|
-| CPU | Any x86-64 or ARM |
-| RAM | 16 GB minimum |
-| GPU | Not used |
-| Network during ranking | None |
-| Python | 3.10+ |
-| Offline precomputation | Required (Step 2 above) |
-| Ranking runtime | < 30 seconds |
+Cross-verified against **Submission Specification v4**.
+
+| Requirement | Status | Notes |
+|---|:---:|---|
+| Exactly 100 rows, ranks 1–100 | ✅ | enforced in `pipeline.py` via `np.argpartition` + sort |
+| `candidate_id,rank,score,reasoning` column order | ✅ | hardcoded in `pipeline.py` |
+| Scores monotonically non-increasing | ✅ | sorted by score desc, ties broken by `candidate_id` asc |
+| Each candidate_id appears exactly once | ✅ | unique per `np.argpartition` selection |
+| UTF-8 encoding | ✅ | `df.to_csv(..., encoding='utf-8')` |
+| Ranking runtime ≤ 5 minutes | ✅ | < 30 s (numpy matmul only) |
+| RAM ≤ 16 GB | ✅ | artifacts fit in < 1 GB; feature matrix ~3 MB for 100 K |
+| CPU-only ranking | ✅ | no GPU used at any stage |
+| No network during ranking | ✅ | model weights loaded from local cache |
+| Reasoning column populated | ✅ | template-generated; specific facts, no hallucination |
+| Reasoning variation | ✅ | branches on 5+ threshold conditions per string |
+| Honeypot check | ✅ | two detection patterns; DQ multiplier 0.05 |
+| GitHub repository | ✅ | https://github.com/SajeevSenthil/resumeranker |
+| Sandbox / demo link | ✅ | https://huggingface.co/spaces/SajeevSenthil/redrob_ranker |
+| `submission_metadata.yaml` at repo root | ✅ | includes all required portal fields |
+| AI tools declared | ✅ | Claude (see `submission_metadata.yaml`) |
 
 ---
 
-## Dependencies
+## Evaluation Metrics (Spec §4)
 
-```
-sentence-transformers>=2.7.0
-numpy>=1.26.0
-pandas>=2.2.0
-tqdm>=4.66.0
-```
+The ground truth uses a hidden relevance judgment. Composite score:
+
+$$
+\text{composite} = 0.50\cdot\text{NDCG@10} + 0.30\cdot\text{NDCG@50} + 0.15\cdot\text{MAP} + 0.05\cdot\text{P@10}
+$$
+
+**Tiebreaks:** P@5 → P@10 → earlier submission timestamp.
+
+Our system optimises for NDCG@10 by design: the multiplicative role gate ensures that the very top positions are occupied by role-aligned candidates — not just semantically similar or behaviorally active ones — because a low role score cannot be compensated.
+
+---
+
+## Compute Environment
+
+| Property | Value |
+|---|---|
+| OS | Windows 11 Home |
+| CPU | 16 cores |
+| RAM | 16 GB |
+| GPU | Not used |
+| Python | 3.12.1 |
+| Network during ranking | None |
+| Offline precomputation required | Yes (Step 2 above) |
+| Precomputation time (100 K, 16-core CPU) | 8 – 12 minutes |
+| Ranking step runtime | < 30 seconds |
+| Disk for artifacts | ~1 GB for 100 K candidates |
