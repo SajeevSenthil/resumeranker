@@ -295,3 +295,11 @@ Our system optimises for NDCG@10 by design: the multiplicative role gate ensures
 | Precomputation time (100 K, 16-core CPU) | 8 – 12 minutes |
 | Ranking step runtime | < 30 seconds |
 | Disk for artifacts | ~1 GB for 100 K candidates |
+
+---
+
+## Contributors
+
+- Vimal
+- Suganth
+- Keshav S
