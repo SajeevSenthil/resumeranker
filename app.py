@@ -132,14 +132,13 @@ def _rank_in_memory(candidates: list[dict], jd_text: str) -> pd.DataFrame:
 # Gradio handler
 # ---------------------------------------------------------------------------
 
-def run_ranker(candidates_file, jd_text, progress=gr.Progress(track_tqdm=True)):
+def run_ranker(candidates_file, jd_text):
     if candidates_file is None:
         return None, None, "Upload a candidates JSON or JSONL file to get started."
     if not jd_text or not jd_text.strip():
         return None, None, "Paste a job description in the text box."
 
     try:
-        progress(0.05, desc="Parsing candidates ...")
         candidates = load_candidates(Path(candidates_file))
 
         if not candidates:
@@ -150,18 +149,14 @@ def run_ranker(candidates_file, jd_text, progress=gr.Progress(track_tqdm=True)):
                 "Trim to a smaller sample and re-upload."
             )
 
-        progress(0.20, desc=f"Extracting features for {len(candidates)} candidates ...")
-        progress(0.50, desc="Computing embeddings ...")
         df = _rank_in_memory(candidates, jd_text.strip())
 
-        progress(0.90, desc="Writing output CSV ...")
         tmp = tempfile.NamedTemporaryFile(
             suffix=".csv", delete=False, mode="w", encoding="utf-8"
         )
         df.to_csv(tmp.name, index=False, encoding="utf-8")
         tmp.close()
 
-        progress(1.0, desc="Done.")
         top = df.iloc[0]
         status = (
             f"Ranked {len(df)} candidates. "
