@@ -25,6 +25,20 @@ if not hasattr(_hfh, "HfFolder"):
     _hfh.HfFolder = _HfFolder
 
 import gradio as gr
+
+# Fix: gradio_client 0.x (bundled with gradio 5.0.0) doesn't handle
+# `additionalProperties: true` (a JSON boolean, not a schema dict) which
+# gradio generates for Dataframe / File component schemas.  Patch get_type
+# so it returns "Any" instead of crashing with
+#   TypeError: argument of type 'bool' is not iterable
+import gradio_client.utils as _gcu
+_orig_get_type = _gcu.get_type
+def _safe_get_type(schema):
+    if not isinstance(schema, dict):
+        return "Any"
+    return _orig_get_type(schema)
+_gcu.get_type = _safe_get_type
+
 import numpy as np
 import pandas as pd
 import torch
