@@ -4,3 +4,4 @@ pandas>=2.2.0
 tqdm>=4.66.0
 gradio>=5.0.0
 audioop-lts
+huggingface-hub>=0.36.0,<0.37.0

@@ -10,6 +10,20 @@ import os
 import tempfile
 from pathlib import Path
 
+# gradio 5.0.0 imports HfFolder from huggingface_hub, but it was removed in
+# huggingface_hub >= 0.37. Restore a minimal shim before gradio loads so the
+# import doesn't crash. Only needed when the attribute is missing.
+import huggingface_hub as _hfh
+if not hasattr(_hfh, "HfFolder"):
+    class _HfFolder:
+        @staticmethod
+        def get_token():
+            return _hfh.get_token()
+        @staticmethod
+        def save_token(token: str) -> None:
+            _hfh.login(token=token)
+    _hfh.HfFolder = _HfFolder
+
 import gradio as gr
 import numpy as np
 import pandas as pd
