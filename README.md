@@ -377,18 +377,11 @@ python path/to/validate_submission.py team_YOUR_ID.csv
 
 ---
 
-## Developed with ❤️ by Team REALM
+## Contributors — Team REALM
 
-### {
-
-### [Sajeev Senthil](https://github.com/SajeevSenthil) ,
-
-### Vimal ,
-
-### [Suganth K](https://github.com/suganth07) ,
-
-### Keshav S
-
-### }
+- [Sajeev Senthil](https://github.com/SajeevSenthil)
+- Vimal
+- [Suganth K](https://github.com/suganth07)
+- Keshav S
 
 <p align="center"><b>From 100,000 resumes to the right 100 — in under 30 seconds, on a laptop CPU.</b></p>
