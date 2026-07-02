@@ -17,27 +17,14 @@ def build_candidate_text(candidate: dict) -> str:
     if profile.get("summary"):
         parts.append(profile["summary"][:400])
 
-    # Most recent 3 roles, trimmed — older roles dilute the signal
-    for role in sorted(career, key=lambda r: r["start_date"], reverse=True)[:3]:
-        desc = role.get("description", "")[:220]
+    # Career descriptions only — what they actually did at work.
+    # Skills list deliberately excluded: it is already captured in the
+    # structured skill_score and including it here lets keyword stuffers
+    # (e.g. a Frontend Engineer who lists FAISS) boost their semantic score.
+    for role in sorted(career, key=lambda r: r["start_date"], reverse=True)[:4]:
+        desc = role.get("description", "")[:250]
         if desc:
             parts.append(f"{role['title']} at {role['company']}: {desc}")
-
-    top_skills = sorted(
-        skills,
-        key=lambda s: (
-            {"expert": 3, "advanced": 2, "intermediate": 1, "beginner": 0}.get(
-                s["proficiency"], 0
-            ),
-            s.get("endorsements", 0),
-        ),
-        reverse=True,
-    )[:12]
-    if top_skills:
-        parts.append("Skills: " + ", ".join(s["name"] for s in top_skills))
-
-    if certs:
-        parts.append("Certifications: " + ", ".join(c["name"] for c in certs[:4]))
 
     return " ".join(parts)
 
