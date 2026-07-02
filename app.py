@@ -177,68 +177,167 @@ def run_ranker(candidates_file, jd_text, progress=gr.Progress(track_tqdm=True)):
 # UI
 # ---------------------------------------------------------------------------
 
+_CSS = """
+/* ── page ── */
+body, .gradio-container { background: #f8fafc !important; }
+
+/* ── header card ── */
+.hdr {
+    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+    border-radius: 12px;
+    padding: 24px 32px 20px;
+    margin-bottom: 20px;
+    color: #fff;
+}
+.hdr h1 { font-size: 1.7rem; font-weight: 700; margin: 0 0 4px; color: #fff; }
+.hdr p  { margin: 0; font-size: 0.88rem; opacity: 0.85; }
+.badge {
+    display: inline-block;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 2px 10px;
+    border-radius: 999px;
+    margin-bottom: 8px;
+}
+
+/* ── panel cards ── */
+.panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px;
+}
+
+/* ── run button ── */
+.run-btn button {
+    background: #2563eb !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.02em !important;
+    height: 44px !important;
+}
+.run-btn button:hover { background: #1d4ed8 !important; }
+
+/* ── status ── */
+.status textarea {
+    font-size: 0.82rem !important;
+    color: #374151 !important;
+    background: #f1f5f9 !important;
+    border-radius: 6px !important;
+}
+
+/* ── pills row ── */
+.pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid #e2e8f0;
+}
+.pill {
+    font-size: 0.72rem;
+    color: #4b5563;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 3px 10px;
+}
+"""
+
 with gr.Blocks(
     title="Redrob Candidate Ranker — Team REALM",
-    theme=gr.themes.Soft(),
+    theme=gr.themes.Default(
+        font=gr.themes.GoogleFont("Inter"),
+        primary_hue="blue",
+        neutral_hue="slate",
+    ),
+    css=_CSS,
 ) as demo:
-    gr.Markdown("""
-# Redrob Candidate Ranker
-**Team REALM** · Redrob Intelligent Candidate Discovery & Ranking Challenge
 
-Two-phase CPU-only pipeline. Upload a candidate file (JSON or JSONL, ≤200 candidates)
-and paste a job description — the ranker scores and ranks them in seconds.
+    # ── Header ──────────────────────────────────────────────────────────────
+    gr.HTML("""
+    <div class="hdr">
+      <div class="badge">TEAM REALM</div>
+      <h1>Redrob Candidate Ranker</h1>
+      <p>
+        Multi-signal ranking pipeline &nbsp;·&nbsp; CPU-only &nbsp;·&nbsp; No LLM calls &nbsp;·&nbsp;
+        <code style="background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:4px;font-size:0.8rem;">
+          final = role_gate × (company·0.30 + skills·0.25 + behavior·0.25 + semantic·0.20)
+        </code>
+      </p>
+    </div>
+    """)
 
-**Scoring formula:** `final = role_score × (company×0.30 + skills×0.25 + behavior×0.25 + semantic×0.20)`
+    # ── Main layout ─────────────────────────────────────────────────────────
+    with gr.Row(equal_height=False):
 
-| Signal | What it measures |
-|--------|-----------------|
-| Role (gate) | Title pattern + ML keyword density in career descriptions |
-| Company | Product-company vs IT-services background, tenure-weighted |
-| Skills | Proficiency × log(duration) × log(endorsements) across 9 JD-relevant groups |
-| Behavior | Open-to-work flag, notice period, platform activity, recruiter responsiveness |
-| Semantic | Cosine similarity of `all-MiniLM-L6-v2` embedding vs JD |
-
-Honeypot detection penalises impossible profiles (expert skills at 0 duration, tenure > date span).
-Reasoning is template-generated from observable fields — no LLM called during ranking.
-""")
-
-    with gr.Row():
-        with gr.Column(scale=1):
+        # Left panel — inputs
+        with gr.Column(scale=1, min_width=300, elem_classes="panel"):
+            gr.Markdown("#### Upload candidates")
             candidates_input = gr.File(
-                label="Candidates file (.json or .jsonl, up to 200 candidates)",
+                label="JSON or JSONL · up to 200 candidates",
                 file_types=[".json", ".jsonl"],
+                show_label=True,
             )
+            gr.Markdown("#### Job description")
             jd_input = gr.Textbox(
-                label="Job description",
-                lines=14,
-                placeholder="Paste the full job description here ...",
+                label="",
+                lines=16,
+                placeholder="Paste the full job description here …",
                 value=_DEFAULT_JD,
+                show_label=False,
             )
-            run_btn = gr.Button("Rank Candidates", variant="primary", size="lg")
-            status_box = gr.Textbox(label="Status", interactive=False, lines=2)
+            run_btn = gr.Button(
+                "Rank Candidates",
+                variant="primary",
+                size="lg",
+                elem_classes="run-btn",
+            )
+            status_box = gr.Textbox(
+                label="Status",
+                interactive=False,
+                lines=2,
+                elem_classes="status",
+            )
 
-        with gr.Column(scale=2):
+        # Right panel — results
+        with gr.Column(scale=2, elem_classes="panel"):
+            gr.Markdown("#### Results")
             output_table = gr.Dataframe(
-                label="Ranked candidates",
+                label="",
                 headers=["candidate_id", "rank", "score", "reasoning"],
                 wrap=True,
                 interactive=False,
+                show_label=False,
             )
-            download_file = gr.File(label="Download ranked CSV")
+            download_file = gr.File(
+                label="Download CSV",
+                show_label=True,
+            )
+
+    # ── Footer pills ─────────────────────────────────────────────────────────
+    gr.HTML("""
+    <div class="pills">
+      <span class="pill">Model: all-MiniLM-L6-v2 (384-dim)</span>
+      <span class="pill">Runtime &lt; 10 s / 100 candidates</span>
+      <span class="pill">Honeypot detection</span>
+      <span class="pill">No GPU · No API calls</span>
+      <span class="pill">Redrob Hackathon 2026</span>
+    </div>
+    """)
 
     run_btn.click(
         fn=run_ranker,
         inputs=[candidates_input, jd_input],
         outputs=[output_table, download_file, status_box],
     )
-
-    gr.Markdown("""
----
-**Runtime**: < 10 seconds for 100 candidates on CPU &nbsp;·&nbsp;
-**Model**: `all-MiniLM-L6-v2` (384-dim, ~80 MB, cached on first load) &nbsp;·&nbsp;
-**No GPU required** &nbsp;·&nbsp;
-**No API calls**
-""")
 
 if __name__ == "__main__":
     demo.launch()
