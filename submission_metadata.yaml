@@ -1,0 +1,91 @@
+# Redrob Hackathon — Submission Metadata
+
+# ============================================================================
+# Team identity
+# ============================================================================
+team_name: "REALM"   # fill with your portal team name
+
+primary_contact:
+  name: "Sajeev Senthil"
+  email: "sajeevs0706@gmail.com"
+  phone: "+91-9092794994"
+
+team_members:
+  - name: "Sajeev Senthil"
+    email: "sajeevs0706@gmail.com"
+    role: "ML Engineer"
+  - name: "Vimal Harihar S"
+    email: "vimal007.x@gmail.com"
+    role: "Team Lead"
+  - name: "Suganth K"
+    email: "suganthk2005@gmail.com"
+    role: "Backend Engineer"
+
+# ============================================================================
+# Code and reproducibility
+# ============================================================================
+github_repo: "https://github.com/SajeevSenthil/resumeranker"
+
+sandbox_link: "FILL_AFTER_DEPLOYMENT"
+# HuggingFace Space URL — update once deployed
+
+reproduce_command: "python rank.py jd.txt team_YOUR_ID.csv"
+# Pre-computation (run once, may exceed 5 min — documented in README):
+#   python build_offline.py path/to/candidates.jsonl
+# Ranking step (must complete within 5 min):
+#   python rank.py jd.txt team_YOUR_ID.csv
+
+# ============================================================================
+# Compute environment
+# ============================================================================
+compute:
+  platform: "Windows 11 Home, local machine"
+  cpu_cores: 16
+  ram_gb: 16
+  python_version: "3.12.1"
+  os: "Windows 11"
+  uses_gpu_for_inference: false
+  has_network_during_ranking: false
+  pre_computation_required: true
+  pre_computation_time_minutes: 12   # approximate for 93K candidates on CPU
+
+# ============================================================================
+# AI tools declaration
+# ============================================================================
+ai_tools_used:
+  - "Claude"
+
+ai_usage_summary: |
+  Used Claude Code for architecture design, implementation guidance, and code
+  review throughout the project. All scoring logic, ontology design, and
+  engineering decisions were made and validated by the team. No candidate
+  profile data was passed to any LLM. The ranking pipeline itself is fully
+  deterministic and runs without any LLM or API call.
+
+# ============================================================================
+# Approach summary
+# ============================================================================
+methodology_summary: |
+  Two-phase CPU-only pipeline. Offline: sentence-transformer embeddings
+  (all-MiniLM-L6-v2) and four structured feature scores are precomputed for
+  every candidate and saved to disk. Online: for a given JD, the JD is encoded,
+  cosine similarity is computed via numpy matmul, and a final score is derived
+  using a multiplicative role gate — role_score × (company×0.30 + skills×0.25
+  + behavior×0.25 + semantic×0.20). Role score blends title-pattern matching
+  with ML keyword density in actual job descriptions, making it harder to game
+  than title alone. Skill scoring uses proficiency × log(duration) ×
+  log(endorsements) depth across 9 JD-specific skill groups. Honeypot detection
+  flags candidates with expert/advanced skills at zero duration or impossible
+  role tenures, collapsing their score to near-zero. Reasoning is
+  template-generated from observable profile fields with no LLM involvement.
+  Ranking step runs in under 30 seconds for 100K candidates.
+
+# ============================================================================
+# Declarations
+# ============================================================================
+declarations:
+  read_submission_spec: true
+  code_is_original_work: true
+  no_collusion: true
+  honeypot_check_done: true
+  reproduction_tested: true
