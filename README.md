@@ -60,10 +60,10 @@ flowchart LR
 ## Scoring Formula
 
 Role score acts as a **multiplicative gate** over a quality sub-score. A candidate with an irrelevant title (e.g. Civil Engineer, `role_score ≈ 0.02`) cannot be rescued by high semantic similarity or strong skills — there is no additive path to the top 100.
+```
+Final Score = Role Score × (0.30 × Company Score + 0.25 × Skills Score + 0.25 × Behavior Score + 0.20 × Semantic Score)
 
-$$
-\text{final\_score} = r_\text{role} \times \bigl(0.30\cdot s_\text{company} + 0.25\cdot s_\text{skills} + 0.25\cdot s_\text{behavior} + 0.20\cdot s_\text{semantic}\bigr)
-$$
+```
 
 ### Components
 
