@@ -20,6 +20,9 @@ team_members:
   - name: "Suganth K"
     email: "suganthk2005@gmail.com"
     role: "Backend Engineer"
+  - name: "Keshav"
+    email: "keshavs100605@gmail.com"
+    role: "ML Engineer"
 
 # ============================================================================
 # Code and reproducibility
