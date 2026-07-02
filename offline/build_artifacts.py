@@ -13,7 +13,10 @@ import pickle
 import time
 from pathlib import Path
 
+import os
+
 import numpy as np
+import torch
 
 from config import ARTIFACT_PATHS, DATA_DIR
 from offline.parse import load_candidates
@@ -22,6 +25,12 @@ from offline.embed import build_candidate_text, encode, load_model
 
 
 def build(candidates_path: Path) -> None:
+    # Use all available CPU cores for PyTorch inference.
+    # Default is often 1-4; on a 16-core machine this can cut embedding time by 4-8x.
+    n_threads = os.cpu_count() or 4
+    torch.set_num_threads(n_threads)
+    torch.set_num_interop_threads(n_threads)
+
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     t0 = time.perf_counter()
 

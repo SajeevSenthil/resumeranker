@@ -3,7 +3,7 @@
 # ============================================================================
 # Team identity
 # ============================================================================
-team_name: "REALM"   # fill with your portal team name
+team_name: "REALM"
 
 primary_contact:
   name: "Sajeev Senthil"
@@ -47,7 +47,7 @@ compute:
   uses_gpu_for_inference: false
   has_network_during_ranking: false
   pre_computation_required: true
-  pre_computation_time_minutes: 12   # approximate for 93K candidates on CPU
+  pre_computation_time_minutes: 75   # measured on 93K candidates, CPU-only
 
 # ============================================================================
 # AI tools declaration
