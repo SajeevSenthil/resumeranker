@@ -1,5 +1,13 @@
+# Precomputed artifacts — rebuild with build_offline.py
 data/*.npy
 data/*.pkl
+
+# Keep the data directory itself tracked
+!data/.gitkeep
+
+# Submission output — don't commit; rename to team_ID.csv before uploading
+submission.csv
+
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -8,3 +16,5 @@ venv/
 dist/
 build/
 .env
+.vscode/
+.idea/
