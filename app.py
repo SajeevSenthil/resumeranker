@@ -178,86 +178,41 @@ def run_ranker(candidates_file, jd_text, progress=gr.Progress(track_tqdm=True)):
 # ---------------------------------------------------------------------------
 
 _CSS = """
-/* ── page ── */
-body, .gradio-container { background: #f8fafc !important; }
+body, .gradio-container { background: #0d1117 !important; }
 
-/* ── header card ── */
 .hdr {
-    background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
-    border-radius: 12px;
-    padding: 24px 32px 20px;
-    margin-bottom: 20px;
-    color: #fff;
-}
-.hdr h1 { font-size: 1.7rem; font-weight: 700; margin: 0 0 4px; color: #fff; }
-.hdr p  { margin: 0; font-size: 0.88rem; opacity: 0.85; }
-.badge {
-    display: inline-block;
-    background: rgba(255,255,255,0.18);
-    border: 1px solid rgba(255,255,255,0.35);
-    color: #fff;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    padding: 2px 10px;
-    border-radius: 999px;
-    margin-bottom: 8px;
-}
-
-/* ── panel cards ── */
-.panel {
-    background: #fff;
-    border: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, #0d1117 0%, #1e3a5f 100%);
+    border: 1px solid #1e3a5f;
     border-radius: 10px;
-    padding: 20px;
+    padding: 22px 28px 18px;
+    margin-bottom: 18px;
+}
+.hdr h1  { color: #f1f5f9; font-size: 1.5rem; font-weight: 700; margin: 0 0 6px; }
+.hdr p   { color: #94a3b8; font-size: 0.8rem; margin: 0; line-height: 1.6; }
+.badge   {
+    display: inline-block;
+    background: rgba(37,99,235,0.25);
+    border: 1px solid #2563eb;
+    color: #93c5fd;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+    padding: 2px 10px; border-radius: 999px; margin-bottom: 10px;
 }
 
-/* ── run button ── */
 .run-btn button {
     background: #2563eb !important;
     border: none !important;
     border-radius: 8px !important;
     font-size: 0.95rem !important;
     font-weight: 600 !important;
-    letter-spacing: 0.02em !important;
-    height: 44px !important;
+    height: 46px !important;
+    width: 100% !important;
 }
 .run-btn button:hover { background: #1d4ed8 !important; }
-
-/* ── status ── */
-.status textarea {
-    font-size: 0.82rem !important;
-    color: #374151 !important;
-    background: #f1f5f9 !important;
-    border-radius: 6px !important;
-}
-
-/* ── pills row ── */
-.pills {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid #e2e8f0;
-}
-.pill {
-    font-size: 0.72rem;
-    color: #4b5563;
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 999px;
-    padding: 3px 10px;
-}
 """
 
 with gr.Blocks(
     title="Redrob Candidate Ranker — Team REALM",
-    theme=gr.themes.Default(
-        font=gr.themes.GoogleFont("Inter"),
-        primary_hue="blue",
-        neutral_hue="slate",
-    ),
+    theme=gr.themes.Monochrome(),
     css=_CSS,
 ) as demo:
 
@@ -267,10 +222,8 @@ with gr.Blocks(
       <div class="badge">TEAM REALM</div>
       <h1>Redrob Candidate Ranker</h1>
       <p>
-        Multi-signal ranking pipeline &nbsp;·&nbsp; CPU-only &nbsp;·&nbsp; No LLM calls &nbsp;·&nbsp;
-        <code style="background:rgba(255,255,255,0.15);padding:1px 6px;border-radius:4px;font-size:0.8rem;">
-          final = role_gate × (company·0.30 + skills·0.25 + behavior·0.25 + semantic·0.20)
-        </code>
+        Upload a candidates file (JSON / JSONL, up to 200) and enter the job description.
+        &nbsp;·&nbsp; CPU-only &nbsp;·&nbsp; No LLM calls &nbsp;·&nbsp; Results in seconds.
       </p>
     </div>
     """)
@@ -278,21 +231,16 @@ with gr.Blocks(
     # ── Main layout ─────────────────────────────────────────────────────────
     with gr.Row(equal_height=False):
 
-        # Left panel — inputs
-        with gr.Column(scale=1, min_width=300, elem_classes="panel"):
-            gr.Markdown("#### Upload candidates")
+        with gr.Column(scale=1, min_width=300):
             candidates_input = gr.File(
-                label="JSON or JSONL · up to 200 candidates",
+                label="Candidates file (.json or .jsonl)",
                 file_types=[".json", ".jsonl"],
-                show_label=True,
             )
-            gr.Markdown("#### Job description")
             jd_input = gr.Textbox(
-                label="",
-                lines=16,
-                placeholder="Paste the full job description here …",
-                value=_DEFAULT_JD,
-                show_label=False,
+                label="Job description",
+                lines=18,
+                placeholder="Type your JD here …",
+                show_label=True,
             )
             run_btn = gr.Button(
                 "Rank Candidates",
@@ -304,34 +252,16 @@ with gr.Blocks(
                 label="Status",
                 interactive=False,
                 lines=2,
-                elem_classes="status",
             )
 
-        # Right panel — results
-        with gr.Column(scale=2, elem_classes="panel"):
-            gr.Markdown("#### Results")
+        with gr.Column(scale=2):
             output_table = gr.Dataframe(
-                label="",
+                label="Ranked candidates",
                 headers=["candidate_id", "rank", "score", "reasoning"],
                 wrap=True,
                 interactive=False,
-                show_label=False,
             )
-            download_file = gr.File(
-                label="Download CSV",
-                show_label=True,
-            )
-
-    # ── Footer pills ─────────────────────────────────────────────────────────
-    gr.HTML("""
-    <div class="pills">
-      <span class="pill">Model: all-MiniLM-L6-v2 (384-dim)</span>
-      <span class="pill">Runtime &lt; 10 s / 100 candidates</span>
-      <span class="pill">Honeypot detection</span>
-      <span class="pill">No GPU · No API calls</span>
-      <span class="pill">Redrob Hackathon 2026</span>
-    </div>
-    """)
+            download_file = gr.File(label="Download CSV")
 
     run_btn.click(
         fn=run_ranker,
